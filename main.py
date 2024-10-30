@@ -79,7 +79,7 @@ def downloadImages(update: Update, context: CallbackContext):
     photo_path = cwd + "/" + downloaded_photo
 
     # upload to google photos
-    album_name = "2024 Commune July 4th"
+    album_name = "Nov 6th 2024"
     uploadPhotoToGoogleAlbum([photo_path], album_name)
 
     os.remove(photo_path)
@@ -103,7 +103,7 @@ def downloadImageAttachments(update: Update, context: CallbackContext):
     photo_path = cwd + "/" + downloaded_photo
 
     # upload to google photos
-    album_name = "2024 Commune July 4th"
+    album_name = "Nov 6th 2024"
     uploadPhotoToGoogleAlbum([photo_path], album_name)
 
     os.remove(photo_path)
@@ -127,7 +127,7 @@ def downloadVideos(update: Update, context: CallbackContext):
     video_path = cwd + "/" + downloaded_video
 
     # upload to google videos
-    album_name = "2024 Commune July 4th"
+    album_name = "Nov 6th 2024"
     uploadPhotoToGoogleAlbum([video_path], album_name)
 
     os.remove(video_path)
