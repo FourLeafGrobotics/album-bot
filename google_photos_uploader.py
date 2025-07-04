@@ -40,8 +40,9 @@ class GooglePhotosUploader:
 
     def get_authorized_session(self, auth_token_file):
 
-        scopes=['https://www.googleapis.com/auth/photoslibrary',
-                'https://www.googleapis.com/auth/photoslibrary.sharing']
+        scopes=['https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata', 
+        'https://www.googleapis.com/auth/photoslibrary.appendonly', 
+        'https://www.googleapis.com/auth/photoslibrary.edit.appcreateddata']
 
         cred = None
 

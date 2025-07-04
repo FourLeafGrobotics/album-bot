@@ -33,7 +33,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 updater = Updater(token=Token.token, use_context=True)
 dispatcher = updater.dispatcher
 
-chat_id = ""
+chat_id = "4721147694"
 
 #####################################################################################
 # Commands
@@ -47,7 +47,7 @@ def startMessage(update: Update, context: CallbackContext):
     print("Function: startMessage")
     updater.bot.send_message(chat_id=update.message.chat_id, text="Hi, I'm Album Bot. I'll keep track of your images that get dumped to the chat.")
     updater.bot.send_message(chat_id=update.message.chat_id, text="If you wish to post an image or video without adding it to the google photos album, add 'exclude' or 'meme' to the message")
-    sent_message = updater.bot.send_message(chat_id=update.message.chat_id, text="Here is this google photos album for this chat: https://photos.app.goo.gl/GrFrz5KwKWk4DgUp7")
+    sent_message = updater.bot.send_message(chat_id=update.message.chat_id, text="Here is this google photos album for this chat: https://photos.app.goo.gl/239rLr3d7dVaiR3aA")
     
     updater.bot.pin_chat_message(chat_id, sent_message.message_id)
 
@@ -79,7 +79,7 @@ def downloadImages(update: Update, context: CallbackContext):
     photo_path = cwd + "/" + downloaded_photo
 
     # upload to google photos
-    album_name = "Nov 6th 2024"
+    album_name = "2025 July 4th Party"
     uploadPhotoToGoogleAlbum([photo_path], album_name)
 
     os.remove(photo_path)
@@ -103,13 +103,13 @@ def downloadImageAttachments(update: Update, context: CallbackContext):
     photo_path = cwd + "/" + downloaded_photo
 
     # upload to google photos
-    album_name = "Nov 6th 2024"
+    album_name = "2025 July 4th Party"
     uploadPhotoToGoogleAlbum([photo_path], album_name)
 
     os.remove(photo_path)
 
 def downloadVideos(update: Update, context: CallbackContext):
-    print("Function: downloadImages")
+    print("Function: downloadVideos")
     message_text = str(update.message.caption).lower() + " " + str(update.message.text).lower() + str(update.message.video_note).lower()
     print("message: " + message_text)
     
@@ -127,7 +127,7 @@ def downloadVideos(update: Update, context: CallbackContext):
     video_path = cwd + "/" + downloaded_video
 
     # upload to google videos
-    album_name = "Nov 6th 2024"
+    album_name = "2025 July 4th Party"
     uploadPhotoToGoogleAlbum([video_path], album_name)
 
     os.remove(video_path)
