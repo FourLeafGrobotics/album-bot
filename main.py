@@ -9,6 +9,8 @@ import sys
 import threading
 from threading import Thread
 import time
+import gspread
+import pandas as pd
 # from my classes
 # from the orginal Telegram API
 from telegram import InlineKeyboardButton, KeyboardButton, Message, ReplyMarkup, Update, User
@@ -53,8 +55,53 @@ def startMessage(update: Update, context: CallbackContext):
 
 # /help command
 def help(update: Update, context: CallbackContext):
-    text="\n\nHi. I cannot help you."
+    text = "Available commands:\n/start - Initialize bot\n/dietary - Get dietary restrictions. Or '/dietary attendance' to get the days people with dietary restrictions are present.\n/help - Show this message"
     sendTelegramMessage(update, context, text)
+
+# /dietary command
+def dietary(update: Update, context: CallbackContext):
+    client = gspread.service_account(filename='credentials.json')
+    spreadsheet = client.open_by_url('https://docs.google.com/spreadsheets/d/1sHFsWpAOaYdZ4kESqyN31m0Kl3UB2z1E3zj8JCpi8c8/edit?usp=sharing')
+    worksheet = spreadsheet.sheet1
+    df = pd.DataFrame(worksheet.get_all_records())
+    
+    # Filter for the relevant column
+    dietary_info = df[['What is your name?', 'Do you have any allergies or dietary restrictions?', 'Days Attending']].dropna(subset=['What is your name?', 'Do you have any allergies or dietary restrictions?'])
+    
+    arg = context.args[0].lower() if context.args else None
+    
+    if arg == 'attendance':
+        # Show people with restrictions and attendance
+        message = "Dietary Restrictions & Attendance:\n"
+        for index, row in dietary_info.iterrows():
+            restriction = row['Do you have any allergies or dietary restrictions?']
+            if restriction.lower() == 'none' or not restriction:
+                continue
+            message += f"{row['What is your name?']} - {row['Days Attending']}\n"
+    else:
+        # Group by dietary restriction
+        restrictions = {}
+        for index, row in dietary_info.iterrows():
+            handle = row['What is your name?']
+            restriction = row['Do you have any allergies or dietary restrictions?']
+            
+            # Simple filter for 'none' case
+            if restriction.lower() == 'none' or not restriction:
+                continue
+                
+            # Handle multiple restrictions (assuming comma-separated)
+            res_list = [r.strip() for r in restriction.split(',')]
+            
+            for r in res_list:
+                if r not in restrictions:
+                    restrictions[r] = []
+                restrictions[r].append(handle)
+                
+        message = "Dietary Restrictions:\n"
+        for res, handles in restrictions.items():
+            message += f"{res} - {', '.join(handles)}\n"
+        
+    sendTelegramMessage(update, context, message)
 
 #####################################################################################
 # Message Handling
@@ -188,6 +235,10 @@ def main():
     # /help - help screen
     help_handler = CommandHandler('help', help)
     dispatcher.add_handler(help_handler)
+
+    # /dietary - dietary info
+    dietary_handler = CommandHandler('dietary', dietary)
+    dispatcher.add_handler(dietary_handler)
 
     photo_download_handler = MessageHandler(filters=Filters.photo, callback=downloadImages)
     dispatcher.add_handler(photo_download_handler)

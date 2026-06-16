@@ -5,6 +5,8 @@ name = "pypi"
 
 [packages]
 google-auth-oauthlib = "*"
+gspread = "*"
+pandas = "*"
 
 [dev-packages]
 
