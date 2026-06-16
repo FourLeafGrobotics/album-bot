@@ -56,7 +56,7 @@ def startMessage(update: Update, context: CallbackContext):
 
 # /help command
 def help(update: Update, context: CallbackContext):
-    text = "Available commands:\n/start - Initialize bot\n/dietary - Get dietary restrictions.\n/dietary attendance - Get the days people with dietary restrictions are present.\n/dietary day - Get the current day's dietary restrictions.\n/dietary <day> - Get the dietary restrictions for a specific day of the party.\n/chores <day> - Get chores table for a day.\n/help - Show this message"
+    text = "Available commands:\n/start - Initialize bot\n/dietary - Get dietary restrictions.\n/dietary attendance - Get the days people with dietary restrictions are present.\n/dietary day - Get the current day's dietary restrictions.\n/dietary <day> - Get the dietary restrictions for a specific day of the party.\n/chores <day> - Get chores table for a day.\n/chores day <day> row <row> - Get chore details including description\n/help - Show this message"
     sendTelegramMessage(update, context, text)
 
 from enum import Enum
@@ -142,7 +142,13 @@ def dietary(update: Update, context: CallbackContext):
 
 # /chores command
 def chores(update: Update, context: CallbackContext):
-    day = int(context.args[0]) if context.args else None
+    args = context.args if context.args else []
+    print(args)
+    # Check for 'row' subcommand
+    if len(args) >= 3 and args[2].lower() == 'row':
+        return _handle_chores_details(update, context, args)
+    
+    day = int(args[0]) if args else None
     if not day:
         sendTelegramMessage(update, context, "Please specify a numbered day (e.g., /chores 2)")
         return
@@ -182,6 +188,57 @@ def chores(update: Update, context: CallbackContext):
     updater.bot.pin_chat_message(chat_id, message.message_id)
     
     os.remove(image_path)
+
+
+def _handle_chores_details(update: Update, context: CallbackContext, args: list):
+    """Handle /chores day <day_number> row <row> command"""
+    try:
+        day = int(args[1])
+        row_index = int(args[3])
+    except (ValueError, IndexError) as e:
+        sendTelegramMessage(update, context, "Invalid arguments. Usage: /chores day <day_number> row <row>")
+        return
+    
+    day_map = {
+        2: 'Thursday, July 2nd',
+        3: 'Friday, July 3rd',
+        4: 'Saturday, July 4th',
+        5: 'Sunday, July 5th'
+    }
+    
+    target_sheet_name = day_map.get(day)
+
+    if not target_sheet_name:
+        sendTelegramMessage(update, context, "Invalid day. Please use Thursday, Friday, Saturday, or Sunday.")
+        return
+        
+    client = gspread.service_account(filename='credentials.json')
+    spreadsheet = client.open_by_url('https://docs.google.com/spreadsheets/d/18cRirNi1sXnPhPE6NZJeQzn9AC8kcKBSbi655sGE0ds/edit?gid=234464649')
+    
+    try:
+        worksheet = spreadsheet.worksheet(target_sheet_name)
+    except:
+        sendTelegramMessage(update, context, "Could not find chore list for that day.")
+        return
+    
+    # Get all records from the worksheet (includes header row at index 0)
+    all_data = worksheet.get_all_records()
+    
+    # Adjust row index: user provides 1-based index, but we need 0-based index into data (excluding header)
+    # Row 1 in sheet = index 0 in all_data, etc.
+    adjusted_row_index = row_index
+    
+    if adjusted_row_index < 0 or adjusted_row_index >= len(all_data):
+        sendTelegramMessage(update, context, f"Invalid row number. Please use a row between 1 and {len(all_data)}.")
+        return
+
+    chore_time = all_data[adjusted_row_index].get('Time', 'No Time')
+    chore_name = all_data[adjusted_row_index].get('Chore', 'No Chore')
+    chore_person = all_data[adjusted_row_index].get('Person', 'No Person')
+    chore_description = all_data[adjusted_row_index].get('Description', 'No description')
+    
+    chat_id = update.message.chat_id
+    updater.bot.send_message(chat_id=chat_id, text=f"Chore Details\n\n{day_map.get(day)} @ {chore_time}\nAssignee:  {chore_person}\nDescription: {chore_description}")
 
 
 #####################################################################################
