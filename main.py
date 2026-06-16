@@ -11,6 +11,7 @@ from threading import Thread
 import time
 import gspread
 import pandas as pd
+import dataframe_image as dfi
 # from my classes
 # from the orginal Telegram API
 from telegram import InlineKeyboardButton, KeyboardButton, Message, ReplyMarkup, Update, User
@@ -47,7 +48,7 @@ def startMessage(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
 
     print("Function: startMessage")
-    updater.bot.send_message(chat_id=update.message.chat_id, text="Hi, I'm Album Bot. I'll keep track of your images that get dumped to the chat.")
+    updater.bot.send_message(chat_id=update.message.chat_id, text="Hi, I'm Dionysus. I'll keep track of your images that get dumped to the chat. I also have other useful commands you can see with the /help command")
     updater.bot.send_message(chat_id=update.message.chat_id, text="If you wish to post an image or video without adding it to the google photos album, add 'exclude' or 'meme' to the message")
     sent_message = updater.bot.send_message(chat_id=update.message.chat_id, text="Here is this google photos album for this chat: https://photos.app.goo.gl/9qjnbP8h7KifWk4B8")
     
@@ -55,8 +56,16 @@ def startMessage(update: Update, context: CallbackContext):
 
 # /help command
 def help(update: Update, context: CallbackContext):
-    text = "Available commands:\n/start - Initialize bot\n/dietary - Get dietary restrictions. Or '/dietary attendance' to get the days people with dietary restrictions are present.\n/help - Show this message"
+    text = "Available commands:\n/start - Initialize bot\n/dietary - Get dietary restrictions.\n/dietary attendance - Get the days people with dietary restrictions are present.\n/dietary day - Get the current day's dietary restrictions.\n/dietary <day> - Get the dietary restrictions for a specific day of the party.\n/chores <day> - Get chores table for a day.\n/help - Show this message"
     sendTelegramMessage(update, context, text)
+
+from enum import Enum
+
+class PartyDays(Enum):
+    JULY_2 = "Thursday, July 2nd"
+    JULY_3 = "Friday, July 3rd"
+    JULY_4 = "Saturday, July 4th"
+    JULY_5 = "Sunday, July 5th"
 
 # /dietary command
 def dietary(update: Update, context: CallbackContext):
@@ -71,25 +80,53 @@ def dietary(update: Update, context: CallbackContext):
     arg = context.args[0].lower() if context.args else None
     
     if arg == 'attendance':
-        # Show people with restrictions and attendance
         message = "Dietary Restrictions & Attendance:\n"
         for index, row in dietary_info.iterrows():
             restriction = row['Do you have any allergies or dietary restrictions?']
             if restriction.lower() == 'none' or not restriction:
                 continue
             message += f"{row['What is your name?']} - {row['Days Attending']}\n"
+            
+    elif arg in ['2', '3', '4', '5'] or arg == 'day':
+        # Mapping input arg to PartyDays
+        day_map = {'2': PartyDays.JULY_2.value, '3': PartyDays.JULY_3.value, '4': PartyDays.JULY_4.value, '5': PartyDays.JULY_5.value}
+        
+        if arg == 'day':
+            # Today's date logic
+            current_day = datetime.now().day
+            target_day_str = day_map.get(str(current_day))
+        else:
+            target_day_str = day_map.get(arg)
+            
+        if not target_day_str:
+            message = "Invalid day. Please use 2, 3, 4, or 5."
+        else:
+            # Filter by day
+            filtered_df = dietary_info[dietary_info['Days Attending'].str.contains(target_day_str, na=False)]
+            
+            restrictions = {}
+            for index, row in filtered_df.iterrows():
+                restriction = row['Do you have any allergies or dietary restrictions?']
+                if restriction.lower() == 'none' or not restriction:
+                    continue
+                res_list = [r.strip() for r in restriction.split(',')]
+                for r in res_list:
+                    restrictions[r] = restrictions.get(r, 0) + 1
+                    
+            message = f"Dietary Restrictions {target_day_str}\n"
+            for res, count in restrictions.items():
+                message += f"{res} - {count}\n"
+                
     else:
-        # Group by dietary restriction
+        # Default behavior: list by restriction and names
         restrictions = {}
         for index, row in dietary_info.iterrows():
             handle = row['What is your name?']
             restriction = row['Do you have any allergies or dietary restrictions?']
             
-            # Simple filter for 'none' case
             if restriction.lower() == 'none' or not restriction:
                 continue
                 
-            # Handle multiple restrictions (assuming comma-separated)
             res_list = [r.strip() for r in restriction.split(',')]
             
             for r in res_list:
@@ -102,6 +139,50 @@ def dietary(update: Update, context: CallbackContext):
             message += f"{res} - {', '.join(handles)}\n"
         
     sendTelegramMessage(update, context, message)
+
+# /chores command
+def chores(update: Update, context: CallbackContext):
+    day = int(context.args[0]) if context.args else None
+    if not day:
+        sendTelegramMessage(update, context, "Please specify a numbered day (e.g., /chores 2)")
+        return
+        
+    day_map = {
+        2: 'Thursday, July 2nd',
+        3: 'Friday, July 3rd',
+        4: 'Saturday, July 4th',
+        5: 'Sunday, July 5th'
+    }
+    
+    target_sheet_name = day_map.get(day)
+
+    if not target_sheet_name:
+        sendTelegramMessage(update, context, "Invalid day. Please use Thursday, Friday, Saturday, or Sunday.")
+        return
+        
+    client = gspread.service_account(filename='credentials.json')
+    spreadsheet = client.open_by_url('https://docs.google.com/spreadsheets/d/18cRirNi1sXnPhPE6NZJeQzn9AC8kcKBSbi655sGE0ds/edit?gid=234464649')
+    
+    try:
+        worksheet = spreadsheet.worksheet(target_sheet_name)
+    except:
+        sendTelegramMessage(update, context, "Could not find chore list for that day.")
+        return
+        
+    df = pd.DataFrame(worksheet.get_all_records())
+    df_subset = df[['Time', 'Chore', 'Person']]
+    
+    # Save as image
+    image_path = 'chores.png'
+    dfi.export(df_subset, image_path)
+    
+    # Send image
+    chat_id = update.message.chat_id
+    message = updater.bot.send_photo(chat_id=chat_id, photo=open(image_path, 'rb'), caption="Chores for " + day_map.get(day))
+    updater.bot.pin_chat_message(chat_id, message.message_id)
+    
+    os.remove(image_path)
+
 
 #####################################################################################
 # Message Handling
@@ -239,6 +320,10 @@ def main():
     # /dietary - dietary info
     dietary_handler = CommandHandler('dietary', dietary)
     dispatcher.add_handler(dietary_handler)
+
+    # /chores - chores table
+    chores_handler = CommandHandler('chores', chores)
+    dispatcher.add_handler(chores_handler)
 
     photo_download_handler = MessageHandler(filters=Filters.photo, callback=downloadImages)
     dispatcher.add_handler(photo_download_handler)
