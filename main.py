@@ -56,7 +56,7 @@ def startMessage(update: Update, context: CallbackContext):
 
 # /help command
 def help(update: Update, context: CallbackContext):
-    text = "Available commands:\n/start - Initialize bot\n/dietary - Get dietary restrictions.\n/dietary attendance - Get the days people with dietary restrictions are present.\n/dietary day - Get the current day's dietary restrictions.\n/dietary <day> - Get the dietary restrictions for a specific day of the party.\n/chores <day> - Get chores table for a day.\n/chores day <day> row <row> - Get chore details including description\n/help - Show this message"
+    text = "Available commands:\n/start - Initialize bot\n/dietary - Get dietary restrictions.\n/dietary attendance - Get the days people with dietary restrictions are present.\n/dietary day - Get the current day's dietary restrictions.\n/dietary <day> - Get the dietary restrictions for a specific day of the party.\n/chores <day> - Get chores table for a day.\n/chores day <day> row <row> - Get chore details including description\n/shopping <day> <meal> - Get shopping list for a day and meal.\n/help - Show this message"
     sendTelegramMessage(update, context, text)
 
 from enum import Enum
@@ -238,7 +238,100 @@ def _handle_chores_details(update: Update, context: CallbackContext, args: list)
     chore_description = all_data[adjusted_row_index].get('Description', 'No description')
     
     chat_id = update.message.chat_id
-    updater.bot.send_message(chat_id=chat_id, text=f"Chore Details\n\n{day_map.get(day)} @ {chore_time}\nAssignee:  {chore_person}\nDescription: {chore_description}")
+    updater.bot.send_message(chat_id=chat_id, text=f"Chore Details - {chore_name}\n\n{day_map.get(day)} @ {chore_time}\nAssignee:  {chore_person}\nDescription: {chore_description}")
+
+def shopping(update: Update, context: CallbackContext):
+    """Handle /shopping <day_number> <meal> command"""
+    args = context.args
+    if len(args) < 2:
+        sendTelegramMessage(update, context, "Usage: /shopping <day_number> <meal>")
+        return
+    
+    day_number = args[0]
+    meal = args[1].capitalize()
+    
+    # Mapping day number to day string
+    day_map = {
+        '2': 'Thursday, July 2nd',
+        '3': 'Friday, July 3rd',
+        '4': 'Saturday, July 4th',
+        '5': 'Sunday, July 5th'
+    }
+    day_str = day_map.get(day_number)
+    
+    if not day_str:
+        sendTelegramMessage(update, context, "Invalid day. Please use 2, 3, 4, or 5.")
+        return
+    
+    # Get shopping list sheet
+    client = gspread.service_account(filename='credentials.json')
+    # Assuming the spreadsheet ID is the same as the dietary one, or maybe it is different?
+    # User said "from the same google sheets as the chores"
+    # Actually chores has a different URL than dietary in the code:
+    # Dietary: https://docs.google.com/spreadsheets/d/1sHFsWpAOaYdZ4kESqyN31m0Kl3UB2z1E3zj8JCpi8c8/edit?usp=sharing
+    # Chores: https://docs.google.com/spreadsheets/d/18cRirNi1sXnPhPE6NZJeQzn9AC8kcKBSbi655sGE0ds/edit?gid=234464649
+    # User said "from the same google sheets as the chores", I will use the chores spreadsheet.
+    spreadsheet = client.open_by_url('https://docs.google.com/spreadsheets/d/18cRirNi1sXnPhPE6NZJeQzn9AC8kcKBSbi655sGE0ds/edit?gid=234464649')
+    
+    try:
+        worksheet = spreadsheet.worksheet('Shopping List')
+    except:
+        sendTelegramMessage(update, context, "Could not find 'Shopping List' worksheet.")
+        return
+
+    # Process the worksheet
+    data = worksheet.get_all_values()
+    
+    # First row: Days
+    # Second row: Meals
+    
+    # Find day column
+    day_cols = data[0]
+    # Find meal row
+    meal_row = data[1]
+    
+    # Need to find the column for the day and then the subcolumn for the meal
+    day_start_col = -1
+    for i, col_val in enumerate(day_cols):
+        if day_str in col_val:
+            day_start_col = i
+            break
+            
+    if day_start_col == -1:
+        sendTelegramMessage(update, context, f"Could not find {day_str} in spreadsheet.")
+        return
+    
+    # Find the specific meal under the day, ensuring we don't go past this day's columns
+    meal_col = -1
+    # Check if there's a next day to define the end of the current day's columns
+    next_day_col = -1
+    for i in range(day_start_col + 1, len(day_cols)):
+        if day_cols[i]: # Found next day
+            next_day_col = i
+            break
+            
+    # If no next day found, use end of meal_row
+    search_end = next_day_col if next_day_col != -1 else len(meal_row)
+    
+    for i in range(day_start_col, search_end):
+        if i < len(meal_row) and meal_row[i] == meal:
+            meal_col = i
+            break
+    
+    if meal_col == -1:
+        sendTelegramMessage(update, context, f"Could not find {meal} for {day_str}.")
+        return
+        
+    # Extract ingredients (starting from row 3)
+    ingredients = []
+    for row in data[2:]:
+        ingredient = row[meal_col] if meal_col < len(row) else ""
+        amount = row[meal_col + 1] if meal_col + 1 < len(row) else ""
+        if ingredient:
+            ingredients.append(f"{ingredient} - {amount}")
+            
+    message = f"{meal} {day_str}\n" + "\n".join(ingredients)
+    sendTelegramMessage(update, context, message)
 
 
 #####################################################################################
@@ -381,6 +474,10 @@ def main():
     # /chores - chores table
     chores_handler = CommandHandler('chores', chores)
     dispatcher.add_handler(chores_handler)
+
+    # /shopping - shopping list
+    shopping_handler = CommandHandler('shopping', shopping)
+    dispatcher.add_handler(shopping_handler)
 
     photo_download_handler = MessageHandler(filters=Filters.photo, callback=downloadImages)
     dispatcher.add_handler(photo_download_handler)
